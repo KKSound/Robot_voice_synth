@@ -1,0 +1,2095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Robot Voice Synth</title>
+<style>
+  :root{
+    --bg: #0a0d0c;
+    --panel: #121614;
+    --panel-raised: #161b19;
+    --border: #232b28;
+    --border-strong: #3a4642;
+    --text: #e9ede9;
+    --text-secondary: #96a39d;
+    --text-muted: #5c6864;
+    --accent: #1D9E75;
+    --accent-bright: #3be8ac;
+    --accent-dark: #0d5a41;
+    --accent-dim: rgba(29,158,117,0.16);
+    --knob-track: #232b28;
+    --radius: 8px;
+    --mono: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background:
+      radial-gradient(circle at 15% 0%, rgba(29,158,117,0.05), transparent 45%),
+      var(--bg);
+    color: var(--text);
+    padding: 0.75rem 0.85rem 1.25rem;
+    font-size: 14px;
+  }
+  .app{
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  /* ---------- Top bar (plugin chrome) ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    gap:1rem;
+    background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.45rem 0.85rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:8px; }
+  .brand-icon{
+    width:26px; height:26px; border-radius:7px;
+    background: conic-gradient(from 180deg, var(--accent), var(--accent-bright), var(--accent));
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:800; color:#04150f;
+  }
+  .brand-name{ font-size:13px; font-weight:700; letter-spacing:0.02em; color: var(--text-secondary); }
+  .title-block{ display:flex; align-items:baseline; gap:8px; }
+  .title-block .title{ font-size:16px; font-weight:700; letter-spacing:0.06em; }
+  .title-block .version{
+    font-size:10px; color: var(--text-muted); font-family: var(--mono);
+    border:1px solid var(--border-strong); border-radius:5px; padding:1px 5px;
+  }
+  .preset-nav{
+    display:flex; align-items:center; gap:6px;
+    margin-left:auto;
+  }
+  .preset-nav .preset-label{
+    font-size:10px; font-weight:700; letter-spacing:0.08em; color: var(--text-muted);
+    margin-right:4px;
+  }
+  .preset-nav select{ width:auto; min-width:170px; }
+  .icon-btn{
+    width:32px; height:32px; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; border-radius:7px;
+  }
+  .topbar-actions{ display:flex; gap:6px; }
+  .icon-btn.active{ background: var(--accent-dim); border-color: var(--accent); color: var(--accent-bright); }
+
+  h1{
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .subtitle{
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    margin: 0 0 0.55rem;
+  }
+  .workspace-grid{
+    display:grid;
+    gap: 0.65rem;
+    margin-bottom: 0.65rem;
+    align-items: stretch;
+    grid-template-columns: 0.95fr 1fr 1fr 1.05fr;
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "texttovoice texttovoice archetype   info"
+      "emotion     waveform    waveform    sequence"
+      "bodymech    voicesynth  voicesynth  sequence"
+      "advanced    voicesynth  voicesynth  sequence";
+  }
+  @media (max-width: 1100px){
+    .workspace-grid{
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "texttovoice texttovoice"
+        "archetype   info"
+        "emotion     waveform"
+        "sequence    sequence"
+        "bodymech    voicesynth"
+        "advanced    voicesynth";
+    }
+  }
+  @media (max-width: 700px){
+    .workspace-grid{
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "texttovoice"
+        "archetype"
+        "info"
+        "emotion"
+        "waveform"
+        "sequence"
+        "bodymech"
+        "voicesynth"
+        "advanced";
+    }
+  }
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 0.85rem;
+    min-height: 60px;
+  }
+  .presets{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    margin-bottom: 0.75rem;
+  }
+  button{
+    font-family: inherit;
+    font-size: 12px;
+    background: var(--panel-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--text);
+    transition: background 0.12s, border-color 0.12s;
+  }
+  button:hover{ background: #1d2422; border-color: var(--accent); }
+  button:active{ transform: scale(0.98); }
+  .btn-primary{
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #04150f;
+    font-weight: 700;
+  }
+  .btn-primary:hover{ background: var(--accent-bright); border-color: var(--accent-bright); }
+  .btn-primary:disabled{ opacity: 0.5; cursor: default; }
+  .transport{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .viz{
+    position:relative;
+    height: 92px;
+    background: #070908;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow:hidden;
+    margin-bottom: 0.4rem;
+  }
+  canvas{ width:100%; height:100%; display:block; }
+  .trim-marker{
+    position:absolute;
+    top:0; bottom:0;
+    width:16px;
+    margin-left:-8px;
+    cursor: ew-resize;
+    touch-action: none;
+  }
+  .trim-marker::before{
+    content:'';
+    position:absolute;
+    left:50%; top:0; bottom:0;
+    width:2px;
+    background: var(--accent-bright);
+    transform: translateX(-50%);
+  }
+  .trim-marker::after{
+    content:'';
+    position:absolute;
+    left:50%; top:-3px;
+    width:12px; height:12px;
+    border-radius:50%;
+    background: var(--accent-bright);
+    transform: translateX(-50%);
+  }
+  .trim-playhead{
+    position:absolute;
+    top:0; bottom:0;
+    width:1px;
+    background: #fff;
+    pointer-events:none;
+    display:none;
+  }
+  .viz-sm{ height: 56px; margin-bottom: 0; }
+  .viz-hint{
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 0 0 0.75rem;
+  }
+  .section-label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 0.6rem;
+  }
+  .section-label:not(:first-child){
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+    margin-top: 0.15rem;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+    gap: 12px 8px;
+  }
+
+  /* ---------- Knob controls ---------- */
+  .field{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .field.select-field{ align-items:stretch; }
+  .knob-label{
+    font-size:9px; font-weight:600; letter-spacing:0.02em;
+    color: var(--text-secondary); text-align:center;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;
+  }
+  .select-field .knob-label{ text-align:left; margin-bottom:1px; }
+  .knob{
+    position:relative;
+    width:44px; height:44px;
+    border-radius:50%;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+  }
+  .knob-ring{
+    position:absolute; inset:0; border-radius:50%;
+    background: conic-gradient(from 225deg,
+      var(--accent-bright) 0deg,
+      var(--accent-bright) calc(var(--frac, 0) * 270deg),
+      var(--knob-track) calc(var(--frac, 0) * 270deg),
+      var(--knob-track) 270deg,
+      transparent 270deg, transparent 360deg);
+    box-shadow: 0 0 0 1px var(--border-strong) inset;
+  }
+  .knob-face{
+    position:absolute; inset:6px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #1b2320, #0d100f 75%);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.6) inset;
+  }
+  .knob-pointer{
+    position:absolute; top:50%; left:50%; width:4px; height:4px; border-radius:50%;
+    background: var(--accent-bright);
+    box-shadow: 0 0 4px var(--accent-bright);
+    transform: translate(-50%,-50%) rotate(var(--angle, -135deg)) translateY(-12px);
+    pointer-events:none;
+  }
+  .knob-value{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family: var(--mono); font-size:9px; font-weight:600; color: var(--text);
+    pointer-events:none;
+  }
+  .knob:hover .knob-face{ box-shadow: 0 0 0 1px var(--accent) inset, 0 1px 2px rgba(0,0,0,0.6) inset; }
+  .knob-native{
+    position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; overflow:hidden;
+  }
+
+  select{
+    width:100%;
+    height: 30px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-strong);
+    background: var(--panel-raised);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 0 6px;
+  }
+  select:focus, .knob:focus-visible{ outline: 2px solid var(--accent); outline-offset:1px; }
+  .status{
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 0.3rem;
+    min-height: 14px;
+  }
+
+  /* ---------- Info panel ---------- */
+  .info-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .info-item .info-label{ font-size:9px; color:var(--text-muted); letter-spacing:0.04em; text-transform:uppercase; }
+  .info-item .info-value{ font-family: var(--mono); font-size:13px; color:var(--text); margin-top:1px; }
+
+  /* ---------- Sequence builder ---------- */
+  .seq-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .seq-step{
+    background: var(--panel-raised); border:1px solid var(--border-strong); border-radius:var(--radius);
+    padding:8px 10px; min-width:110px; font-size:12px;
+  }
+  .seq-step .seq-step-num{
+    display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+    border-radius:50%; background: var(--accent-dim); color: var(--accent-bright); font-size:10px; font-weight:700;
+    margin-right:6px;
+  }
+  footer.appfoot{ text-align:center; font-size:11px; color:var(--text-muted); margin:0.75rem 0 0.25rem; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">K</div>
+      <span class="brand-name">K.K.Sound</span>
+    </div>
+    <div class="title-block">
+      <span class="title">ROBOT VOICE FM-SYNTH</span>
+      <span class="version">v1.0.0</span>
+    </div>
+    <div class="topbar-actions" style="margin-left:auto;">
+      <button id="topSaveBtn" class="icon-btn" title="Save current sound as WAV">💾</button>
+      <button id="topResetBtn" class="icon-btn" title="Reset to defaults">↺</button>
+      <button id="topMuteBtn" class="icon-btn" title="Mute output">🔊</button>
+    </div>
+  </div>
+
+  <p class="subtitle" style="margin-bottom:0.5rem;">Non-verbal robot vocalizations — tweak, preview, export as WAV.</p>
+
+  <div class="workspace-grid">
+  <div class="card" style="grid-area:texttovoice;">
+    <div class="section-label">Text → Voice</div>
+    <div style="display:flex; gap:8px; margin:0.6rem 0; flex-wrap:wrap;">
+      <input type="text" id="textInput" autocomplete="off" name="robotVoicePhrase" placeholder="Type a phrase — e.g. Hello friend! / What? / System error." style="flex:1; min-width:220px; height:38px; border-radius:var(--radius); border:1px solid var(--border-strong); padding:0 10px; font-family:inherit; font-size:14px; background:var(--panel-raised); color:var(--text);">
+      <button id="textGenBtn" class="btn-primary">Generate &amp; Play</button>
+    </div>
+    <p class="viz-hint" id="textAnalysisOut" style="margin:0;">Detects tone from punctuation and word choice, then maps it onto the sliders below.</p>
+  </div>
+
+  <div class="card" style="grid-area:archetype;">
+    <div class="section-label" style="margin-bottom:0.6rem;">Character archetype</div>
+    <select id="archetypeSelect" style="margin-bottom:0.6rem;">
+      <option value="none">No archetype</option>
+      <option value="warMachine">⚙️ War machine</option>
+      <option value="broken">💢 Broken / glitchy</option>
+      <option value="swarm">🐝 Swarm / hive</option>
+      <option value="friendlyBot">🌟 Friendly companion</option>
+      <option value="sentry">🛰️ Sentry / guardian</option>
+    </select>
+    <p class="viz-hint" id="archetypeHint" style="margin:0;">No archetype selected — emotion presets and generated phrases use their own default character.</p>
+  </div>
+
+  <div class="card" style="grid-area:info;">
+    <div class="section-label" style="margin-bottom:0.5rem;">Info</div>
+    <div class="info-grid">
+      <div class="info-item"><div class="info-label">Sample rate</div><div class="info-value">44.1 kHz</div></div>
+      <div class="info-item"><div class="info-label">Bit depth</div><div class="info-value">16-bit</div></div>
+      <div class="info-item"><div class="info-label">Format</div><div class="info-value">WAV</div></div>
+      <div class="info-item"><div class="info-label">Length</div><div class="info-value" id="infoLength">0.00 sec</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="grid-area:emotion;">
+    <div class="section-label" style="margin-bottom:0.6rem;">Emotion presets</div>
+    <select id="emotionSelect" style="margin-bottom:0.75rem;">
+      <option value="" disabled selected>— Choose emotion —</option>
+      <option value="surprise">😮 Surprise</option>
+      <option value="agree">👍 Agreement</option>
+      <option value="error">❌ Error</option>
+      <option value="joy">😊 Joy</option>
+      <option value="sad">😢 Sadness</option>
+      <option value="curious">🤔 Curious</option>
+      <option value="companion">💚 Companion</option>
+    </select>
+    <div class="transport" style="margin-bottom:8px;">
+      <button id="playBtn" class="btn-primary">▶ Play</button>
+      <button id="randomBtn">🎲 Randomize</button>
+    </div>
+    <div class="transport" style="margin-bottom:0;">
+      <button id="exportBtn">⭳ Save as WAV</button>
+      <button id="resetTrimBtn">Reset selection</button>
+    </div>
+    <span class="status" id="statusText"></span>
+  </div>
+
+  <div class="card" style="grid-area:waveform;">
+    <div class="section-label" style="margin-bottom:0.5rem;">Waveform preview</div>
+    <div class="viz">
+      <canvas id="viz"></canvas>
+      <div class="trim-marker" id="markerStart"></div>
+      <div class="trim-marker" id="markerEnd"></div>
+      <div class="trim-playhead" id="playhead"></div>
+    </div>
+    <p class="viz-hint" style="margin:0;">Drag the two green markers to select the region that plays and exports.</p>
+  </div>
+
+  <div class="card" style="grid-area:sequence;">
+    <div class="section-label" style="margin-bottom:0.5rem;">Sequence builder</div>
+    <div class="transport" style="margin-bottom:0.5rem;">
+      <button id="addStepBtn">+ Add sound</button>
+      <button id="playSeqBtn" class="btn-primary">▶ Play</button>
+      <button id="exportSeqBtn">⭳ Export</button>
+      <button id="clearSeqBtn">Clear</button>
+    </div>
+    <div id="seqList" class="seq-list"></div>
+    <div class="viz viz-sm" id="seqVizWrap" style="margin-top:0.5rem;">
+      <canvas id="seqCanvas"></canvas>
+      <div class="trim-marker" id="seqMarkerStart"></div>
+      <div class="trim-marker" id="seqMarkerEnd"></div>
+      <div class="trim-playhead" id="seqPlayhead"></div>
+    </div>
+    <p class="viz-hint" style="margin:0.3rem 0 0;">Drag markers to select part of the full sequence to play/export. Gap (ms), reorder with ↑ / ↓.</p>
+  </div>
+
+  <div class="card" style="grid-area:bodymech;">
+    <div class="section-label" style="margin-bottom:0.5rem;">Body mechanics</div>
+    <div class="grid">
+      <div class="field">
+        <div class="knob-label">Servo volume</div>
+        <div class="knob" data-for="servoAmt"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="servoAmtOut">30</div></div>
+        <input type="range" id="servoAmt" min="0" max="100" step="1" value="30" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Servo pitch (Hz)</div>
+        <div class="knob" data-for="servoPitch"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="servoPitchOut">180</div></div>
+        <input type="range" id="servoPitch" min="60" max="500" step="5" value="180" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Gear clicks amount</div>
+        <div class="knob" data-for="clickAmt"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="clickAmtOut">20</div></div>
+        <input type="range" id="clickAmt" min="0" max="100" step="1" value="20" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Click count</div>
+        <div class="knob" data-for="clickCount"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="clickCountOut">3</div></div>
+        <input type="range" id="clickCount" min="0" max="10" step="1" value="3" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Static / hiss</div>
+        <div class="knob" data-for="staticAmt"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="staticAmtOut">10</div></div>
+        <input type="range" id="staticAmt" min="0" max="100" step="1" value="10" class="knob-native">
+      </div>
+      <div class="field select-field">
+        <div class="knob-label">Mechanics timing</div>
+        <select id="mechTiming">
+          <option value="before">Before voice</option>
+          <option value="during" selected>With voice</option>
+          <option value="after">After voice</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="grid-area:voicesynth;">
+    <div class="section-label" style="margin-bottom:0.5rem;">Voice synth</div>
+    <div class="grid">
+      <div class="field">
+        <div class="knob-label">Pitch (Hz)</div>
+        <div class="knob" data-for="baseFreq"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="baseFreqOut">420</div></div>
+        <input type="range" id="baseFreq" min="150" max="900" step="5" value="420" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Pitch jump (st)</div>
+        <div class="knob" data-for="jump"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="jumpOut">12</div></div>
+        <input type="range" id="jump" min="-24" max="24" step="1" value="12" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Duration (ms)</div>
+        <div class="knob" data-for="duration"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="durOut">320</div></div>
+        <input type="range" id="duration" min="100" max="1800" step="10" value="320" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Syllable count</div>
+        <div class="knob" data-for="chirps"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="chirpsOut">2</div></div>
+        <input type="range" id="chirps" min="1" max="8" step="1" value="2" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Vibrato depth</div>
+        <div class="knob" data-for="fmDepth"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="fmOut">60</div></div>
+        <input type="range" id="fmDepth" min="0" max="200" step="5" value="60" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Vibrato rate (Hz)</div>
+        <div class="knob" data-for="fmRate"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="fmRateOut">40</div></div>
+        <input type="range" id="fmRate" min="5" max="120" step="1" value="40" class="knob-native">
+      </div>
+      <div class="field select-field">
+        <div class="knob-label">Waveform</div>
+        <select id="waveType">
+          <option value="square">Square — sharp, crisp</option>
+          <option value="sawtooth">Sawtooth — buzzy</option>
+          <option value="sine">Sine — soft</option>
+          <option value="triangle">Triangle — warm</option>
+        </select>
+      </div>
+      <div class="field select-field">
+        <div class="knob-label">Pitch contour</div>
+        <select id="contour">
+          <option value="rise">Rising</option>
+          <option value="fall">Falling</option>
+          <option value="rise-fall">Rise then fall</option>
+          <option value="fall-rise">Fall then rise</option>
+          <option value="wobble">Wobble</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="knob-label">Glide (portamento)</div>
+        <div class="knob" data-for="glide"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="glideOut">40</div></div>
+        <input type="range" id="glide" min="0" max="100" step="1" value="40" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Echo / tail</div>
+        <div class="knob" data-for="echo"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="echoOut">15</div></div>
+        <input type="range" id="echo" min="0" max="80" step="1" value="15" class="knob-native">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="grid-area:advanced;">
+    <div class="section-label" style="margin-bottom:0.5rem;">Advanced</div>
+    <div class="grid">
+      <div class="field">
+        <div class="knob-label">Unison voices</div>
+        <div class="knob" data-for="unison"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="unisonOut">2</div></div>
+        <input type="range" id="unison" min="1" max="3" step="1" value="2" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Unison detune (¢)</div>
+        <div class="knob" data-for="detune"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="detuneOut">18</div></div>
+        <input type="range" id="detune" min="0" max="60" step="1" value="18" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Stereo motion</div>
+        <div class="knob" data-for="stereo"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="stereoOut">30</div></div>
+        <input type="range" id="stereo" min="0" max="100" step="1" value="30" class="knob-native">
+      </div>
+      <div class="field">
+        <div class="knob-label">Grit / noise</div>
+        <div class="knob" data-for="noise"><div class="knob-ring"></div><div class="knob-face"></div><div class="knob-pointer"></div><div class="knob-value" id="noiseOut">10</div></div>
+        <input type="range" id="noise" min="0" max="100" step="1" value="10" class="knob-native">
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <footer class="appfoot">K.K.Sound</footer>
+</div>
+
+
+<script>
+(function(){
+  const canvas = document.getElementById('viz');
+  const ctx2d = canvas.getContext('2d');
+  function resize(){
+    canvas.width = canvas.clientWidth * devicePixelRatio;
+    canvas.height = canvas.clientHeight * devicePixelRatio;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  let audioCtx = null;
+  let masterGain = null;
+  let isMuted = false;
+  function ensureAudio(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = isMuted ? 0 : 1;
+      masterGain.connect(audioCtx.destination);
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  const statusText = document.getElementById('statusText');
+
+  const els = {
+    baseFreq: document.getElementById('baseFreq'),
+    jump: document.getElementById('jump'),
+    duration: document.getElementById('duration'),
+    chirps: document.getElementById('chirps'),
+    fmDepth: document.getElementById('fmDepth'),
+    fmRate: document.getElementById('fmRate'),
+    noise: document.getElementById('noise'),
+    echo: document.getElementById('echo'),
+    waveType: document.getElementById('waveType'),
+    servoAmt: document.getElementById('servoAmt'),
+    servoPitch: document.getElementById('servoPitch'),
+    clickAmt: document.getElementById('clickAmt'),
+    clickCount: document.getElementById('clickCount'),
+    staticAmt: document.getElementById('staticAmt'),
+    mechTiming: document.getElementById('mechTiming'),
+    contour: document.getElementById('contour'),
+    glide: document.getElementById('glide'),
+    unison: document.getElementById('unison'),
+    detune: document.getElementById('detune'),
+    stereo: document.getElementById('stereo'),
+  };
+  const outs = {
+    baseFreq: document.getElementById('baseFreqOut'),
+    jump: document.getElementById('jumpOut'),
+    duration: document.getElementById('durOut'),
+    chirps: document.getElementById('chirpsOut'),
+    fmDepth: document.getElementById('fmOut'),
+    fmRate: document.getElementById('fmRateOut'),
+    noise: document.getElementById('noiseOut'),
+    echo: document.getElementById('echoOut'),
+    servoAmt: document.getElementById('servoAmtOut'),
+    servoPitch: document.getElementById('servoPitchOut'),
+    clickAmt: document.getElementById('clickAmtOut'),
+    clickCount: document.getElementById('clickCountOut'),
+    staticAmt: document.getElementById('staticAmtOut'),
+    glide: document.getElementById('glideOut'),
+    unison: document.getElementById('unisonOut'),
+    detune: document.getElementById('detuneOut'),
+    stereo: document.getElementById('stereoOut'),
+  };
+  Object.keys(outs).forEach(k=>{
+    els[k].addEventListener('input', ()=>{ outs[k].textContent = els[k].value; });
+  });
+
+  const markerStart = document.getElementById('markerStart');
+  const markerEnd = document.getElementById('markerEnd');
+  const playhead = document.getElementById('playhead');
+
+  let previewBuffer = null; // offline-rendered AudioBuffer of the current single sound
+  let trimStart = 0; // fraction 0..1
+  let trimEnd = 1;   // fraction 0..1
+
+  function drawIdle(){
+    ctx2d.clearRect(0,0,canvas.width, canvas.height);
+    ctx2d.strokeStyle = '#3a4642';
+    ctx2d.lineWidth = 2 * devicePixelRatio;
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, canvas.height/2);
+    ctx2d.lineTo(canvas.width, canvas.height/2);
+    ctx2d.stroke();
+  }
+  drawIdle();
+
+  function updateMarkerPositions(){
+    markerStart.style.left = (trimStart * 100) + '%';
+    markerEnd.style.left = (trimEnd * 100) + '%';
+  }
+  updateMarkerPositions();
+
+  function drawWaveform(){
+    if(!previewBuffer){ drawIdle(); return; }
+    const data = previewBuffer.getChannelData(0);
+    const width = canvas.width, height = canvas.height;
+    const mid = height / 2;
+    const samplesPerPixel = Math.max(1, Math.floor(data.length / width));
+
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.strokeStyle = '#1D9E75';
+    ctx2d.lineWidth = 1 * devicePixelRatio;
+    ctx2d.beginPath();
+    for(let x=0; x<width; x++){
+      const startIdx = x * samplesPerPixel;
+      let min = 1, max = -1;
+      for(let i=0;i<samplesPerPixel;i++){
+        const idx = startIdx + i;
+        if(idx >= data.length) break;
+        const v = data[idx];
+        if(v < min) min = v;
+        if(v > max) max = v;
+      }
+      if(max < min){ min = 0; max = 0; }
+      const yTop = mid - max * mid * 0.9;
+      const yBottom = mid - min * mid * 0.9;
+      ctx2d.moveTo(x, yTop);
+      ctx2d.lineTo(x, yBottom);
+    }
+    ctx2d.stroke();
+
+    // Selected region gets a faint accent tint; everything outside it is
+    // darkened heavily so the active playback/export range is unambiguous
+    // even on a near-black background.
+    const leftPx = trimStart * width;
+    const rightPx = trimEnd * width;
+    ctx2d.fillStyle = 'rgba(59,232,172,0.10)';
+    ctx2d.fillRect(leftPx, 0, Math.max(0, rightPx - leftPx), height);
+    ctx2d.fillStyle = 'rgba(0,0,0,0.65)';
+    if(leftPx > 0) ctx2d.fillRect(0, 0, leftPx, height);
+    if(rightPx < width) ctx2d.fillRect(rightPx, 0, width - rightPx, height);
+  }
+
+  async function renderPreview(){
+    const p = getParams();
+    const sampleRate = 44100;
+    const estSeconds = p.totalDur + (p.mechTiming !== 'during' ? Math.max(0.15, p.totalDur*0.5) + 0.1 : 0) + 0.5;
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(sampleRate * estSeconds), sampleRate);
+    buildGraph(offlineCtx, p, 0);
+    const rendered = await offlineCtx.startRendering();
+    previewBuffer = rendered;
+    drawWaveform();
+    return rendered;
+  }
+
+  function sliceBuffer(buffer, startSec, endSec){
+    ensureAudio();
+    const sampleRate = buffer.sampleRate;
+    const startSample = Math.max(0, Math.floor(startSec * sampleRate));
+    const endSample = Math.min(buffer.length, Math.ceil(endSec * sampleRate));
+    const frameCount = Math.max(1, endSample - startSample);
+    const sliced = audioCtx.createBuffer(buffer.numberOfChannels, frameCount, sampleRate);
+    for(let ch=0; ch<buffer.numberOfChannels; ch++){
+      const src = buffer.getChannelData(ch);
+      const dest = sliced.getChannelData(ch);
+      for(let i=0;i<frameCount;i++){
+        dest[i] = src[startSample + i] || 0;
+      }
+    }
+    return sliced;
+  }
+
+  function setupMarkerDrag(el, which){
+    el.addEventListener('pointerdown', (e)=>{
+      el.setPointerCapture(e.pointerId);
+      const onMove = (ev)=>{
+        const rect = canvas.getBoundingClientRect();
+        let frac = (ev.clientX - rect.left) / rect.width;
+        frac = Math.max(0, Math.min(1, frac));
+        if(which === 'start'){
+          trimStart = Math.max(0, Math.min(frac, trimEnd - 0.02));
+        } else {
+          trimEnd = Math.min(1, Math.max(frac, trimStart + 0.02));
+        }
+        updateMarkerPositions();
+        drawWaveform();
+      };
+      const onUp = ()=>{
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  }
+  setupMarkerDrag(markerStart, 'start');
+  setupMarkerDrag(markerEnd, 'end');
+
+  document.getElementById('resetTrimBtn').addEventListener('click', ()=>{
+    trimStart = 0; trimEnd = 1;
+    updateMarkerPositions();
+    drawWaveform();
+  });
+
+  // Keep the waveform preview fresh as sliders change, without needing to press Play
+  let previewDebounce = null;
+  Object.keys(els).forEach(k=>{
+    const el = els[k];
+    const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(evt, ()=>{
+      if(previewDebounce) clearTimeout(previewDebounce);
+      previewDebounce = setTimeout(()=>{ renderPreview(); }, 250);
+    });
+  });
+
+  function getParams(){
+    return {
+      baseFreq: parseFloat(els.baseFreq.value),
+      jumpSemis: parseFloat(els.jump.value),
+      totalDur: parseFloat(els.duration.value) / 1000,
+      numChirps: parseInt(els.chirps.value, 10),
+      fmDepth: parseFloat(els.fmDepth.value),
+      fmRate: parseFloat(els.fmRate.value),
+      noiseAmt: parseFloat(els.noise.value) / 100,
+      echoAmt: parseFloat(els.echo.value) / 100,
+      wave: els.waveType.value,
+      servoAmt: parseFloat(els.servoAmt.value),
+      servoPitch: parseFloat(els.servoPitch.value),
+      clickAmt: parseFloat(els.clickAmt.value),
+      clickCount: parseInt(els.clickCount.value, 10),
+      staticAmt: parseFloat(els.staticAmt.value),
+      mechTiming: els.mechTiming.value,
+      contour: els.contour.value,
+      glide: parseFloat(els.glide.value),
+      unison: parseInt(els.unison.value, 10),
+      detune: parseFloat(els.detune.value),
+      stereo: parseFloat(els.stereo.value),
+    };
+  }
+
+  function makeNoiseBuffer(ctx, dur){
+    const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * (dur || 0.5)));
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++) data[i] = Math.random()*2-1;
+    return buffer;
+  }
+
+  function scheduleServo(ctx, master, startTime, amt, pitch, dur){
+    if(amt <= 1) return;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(pitch*0.7, startTime);
+    osc.frequency.linearRampToValueAtTime(pitch*1.4, startTime + dur*0.5);
+    osc.frequency.linearRampToValueAtTime(pitch*0.9, startTime + dur);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = pitch;
+    filt.Q.value = 4;
+    const g = ctx.createGain();
+    const peak = (amt/100) * 0.25;
+    g.gain.setValueAtTime(0.0001, startTime);
+    g.gain.linearRampToValueAtTime(peak, startTime + dur*0.2);
+    g.gain.linearRampToValueAtTime(0.0001, startTime + dur);
+    osc.connect(filt); filt.connect(g); g.connect(master);
+    osc.start(startTime); osc.stop(startTime + dur + 0.02);
+  }
+
+  function scheduleClicks(ctx, master, startTime, amt, count, spanDur){
+    if(amt <= 1 || count <= 0) return;
+    for(let i=0;i<count;i++){
+      const t = startTime + (spanDur * (i / Math.max(1,count))) + Math.random()*0.01;
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = 800 + Math.random()*1200;
+      const g = ctx.createGain();
+      const peak = (amt/100) * 0.3;
+      g.gain.setValueAtTime(peak, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + 0.04);
+    }
+  }
+
+  function scheduleStatic(ctx, master, startTime, amt, dur){
+    if(amt <= 1) return;
+    const src = ctx.createBufferSource();
+    src.buffer = makeNoiseBuffer(ctx, dur);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'highpass';
+    filt.frequency.value = 3000;
+    const g = ctx.createGain();
+    const peak = (amt/100) * 0.15;
+    g.gain.setValueAtTime(0.0001, startTime);
+    g.gain.linearRampToValueAtTime(peak, startTime + dur*0.1);
+    g.gain.linearRampToValueAtTime(0.0001, startTime + dur);
+    src.connect(filt); filt.connect(g); g.connect(master);
+    src.start(startTime); src.stop(startTime + dur + 0.02);
+  }
+
+  // A short, sharp burst of high-passed noise on stressed/accented syllables —
+  // a semantic "spark" that reads as emphasis independent of the grit slider.
+  function scheduleSpark(ctx, master, startTime){
+    const dur = 0.02 + Math.random()*0.015;
+    const src = ctx.createBufferSource();
+    src.buffer = makeNoiseBuffer(ctx, 0.1);
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'highpass';
+    filt.frequency.value = 4000 + Math.random()*2000;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, startTime);
+    g.gain.linearRampToValueAtTime(0.18, startTime + dur*0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+    src.connect(filt); filt.connect(g); g.connect(master);
+    src.start(startTime); src.stop(startTime + dur + 0.02);
+  }
+
+  // Sparse, tiny amplitude flickers across a time span — a few sample-and-hold-style
+  // glitches keep a longer phrase from sounding like a too-perfect, mechanically looped signal.
+  function scheduleMicroGlitches(gainNode, startTime, endTime, baseLevel){
+    const span = endTime - startTime;
+    if(span <= 0.08) return;
+    const numSlots = Math.max(1, Math.floor(span / 0.12));
+    const slotSize = span / numSlots;
+    const times = [];
+    for(let k=0;k<numSlots;k++){
+      if(Math.random() < 0.35){
+        const t = startTime + (k + Math.random()*0.7 + 0.15) * slotSize;
+        if(t > startTime + 0.02 && t < endTime - 0.02) times.push(t);
+      }
+    }
+    times.sort((a,b)=>a-b);
+    gainNode.gain.setValueAtTime(baseLevel, startTime);
+    times.forEach(t=>{
+      const dur = 0.006 + Math.random()*0.012;
+      const mult = 0.4 + Math.random()*1.3;
+      gainNode.gain.setValueAtTime(baseLevel, Math.max(startTime, t - 0.003));
+      gainNode.gain.linearRampToValueAtTime(baseLevel*mult, t);
+      gainNode.gain.linearRampToValueAtTime(baseLevel, t + dur);
+    });
+  }
+
+  // Shapes a syllable's amplitude envelope according to its assigned "gesture" —
+  // this is what makes a phrase feel like several distinct sound events instead of
+  // one repeated shape stretched to different pitches.
+  function scheduleGestureEnvelope(g, shape, segStart, segEnd, playStart, playEnd, peak, crossfade, durSyl){
+    const attackTime = Math.max(crossfade, durSyl*0.12);
+    switch(shape){
+      case 'rising':
+        g.gain.setValueAtTime(0.0001, playStart);
+        g.gain.linearRampToValueAtTime(peak, segEnd - Math.max(crossfade, durSyl*0.05));
+        g.gain.linearRampToValueAtTime(0.0001, playEnd);
+        break;
+      case 'falling':
+        g.gain.setValueAtTime(0.0001, playStart);
+        g.gain.linearRampToValueAtTime(peak, segStart + Math.max(crossfade, durSyl*0.06));
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak*0.03), playEnd);
+        break;
+      case 'swell':
+        g.gain.setValueAtTime(0.0001, playStart);
+        g.gain.linearRampToValueAtTime(peak*0.15, segStart + durSyl*0.3);
+        g.gain.linearRampToValueAtTime(peak, segEnd - Math.max(crossfade, durSyl*0.1));
+        g.gain.linearRampToValueAtTime(0.0001, playEnd);
+        break;
+      case 'pulse': {
+        const numPulses = 2;
+        const pulseDur = durSyl / numPulses;
+        g.gain.setValueAtTime(0.0001, playStart);
+        for(let k=0;k<numPulses;k++){
+          const pStart = segStart + k*pulseDur;
+          g.gain.linearRampToValueAtTime(peak, pStart + pulseDur*0.4);
+          g.gain.linearRampToValueAtTime(peak*0.12, pStart + pulseDur*0.9);
+        }
+        g.gain.linearRampToValueAtTime(0.0001, playEnd);
+        break;
+      }
+      case 'stutter': {
+        const numStutters = clamp(Math.round(durSyl/0.06), 3, 6);
+        const stutterDur = durSyl / numStutters;
+        g.gain.setValueAtTime(0.0001, playStart);
+        for(let k=0;k<numStutters;k++){
+          const sStart = segStart + k*stutterDur;
+          g.gain.linearRampToValueAtTime(peak, sStart + stutterDur*0.18);
+          g.gain.linearRampToValueAtTime(0.0001, sStart + stutterDur*0.55);
+        }
+        break;
+      }
+      case 'arc':
+        g.gain.setValueAtTime(0.0001, playStart);
+        g.gain.linearRampToValueAtTime(peak, segStart + durSyl*0.5);
+        g.gain.linearRampToValueAtTime(0.0001, playEnd);
+        break;
+      default:
+        g.gain.setValueAtTime(0.0001, playStart);
+        g.gain.linearRampToValueAtTime(peak, segStart + attackTime);
+        g.gain.setValueAtTime(peak, Math.max(segStart+attackTime, segEnd - attackTime));
+        g.gain.linearRampToValueAtTime(0.0001, playEnd);
+    }
+  }
+
+  // Maps progress t (0..1) to a semitone offset, shaping the overall pitch arc across syllables
+  function contourOffset(t, jumpSemis, contour){
+    switch(contour){
+      case 'fall': return -t * jumpSemis;
+      case 'rise-fall': return jumpSemis * (1 - Math.abs(2*t - 1));
+      case 'fall-rise': return -jumpSemis * (1 - Math.abs(2*t - 1));
+      case 'wobble': return jumpSemis * Math.sin(t * Math.PI * 2);
+      case 'rise':
+      default: return t * jumpSemis;
+    }
+  }
+
+  // Builds the full audio graph on the given context (works for both live AudioContext and OfflineAudioContext)
+  // outputNode lets multiple sequence steps share one destination bus instead of each hard-wiring to ctx.destination
+  function buildGraph(ctx, p, now, outputNode){
+    outputNode = outputNode || ctx.destination;
+    const master = ctx.createGain();
+    master.gain.value = 0.4;
+
+    if(p.echoAmt > 0.02){
+      const delay = ctx.createDelay();
+      delay.delayTime.value = 0.12;
+      const feedback = ctx.createGain();
+      feedback.gain.value = p.echoAmt * 0.6;
+      const wet = ctx.createGain();
+      wet.gain.value = p.echoAmt;
+      master.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(wet);
+      wet.connect(outputNode);
+    }
+    master.connect(outputNode);
+
+    const chirpDur = p.totalDur / (p.numChirps + (p.numChirps-1)*0.3);
+    const gapDur = chirpDur * 0.3;
+    const mechDur = Math.max(0.15, p.totalDur * 0.5);
+
+    let mechStart = now;
+    if(p.mechTiming === 'after') mechStart = now + p.totalDur + 0.02;
+
+    scheduleServo(ctx, master, mechStart, p.servoAmt, p.servoPitch, p.mechTiming==='during' ? p.totalDur : mechDur);
+    scheduleClicks(ctx, master, mechStart, p.clickAmt, p.clickCount, p.mechTiming==='during' ? p.totalDur : mechDur);
+    scheduleStatic(ctx, master, mechStart, p.staticAmt, p.mechTiming==='during' ? p.totalDur : mechDur);
+
+    const voiceStart = p.mechTiming === 'before' ? now + mechDur + 0.03 : now;
+    const glideAmt = p.glide / 100; // 0 = staccato bursts, 1 = fully smooth legato glide
+    const numSyl = p.numChirps;
+
+    // --- Syllable archetype planning (shared across unison voices) ---
+    // Each syllable becomes one of three characters, giving a phrase real variety
+    // instead of one identical beep repeated: 'blip' (short, punchy jump), 'whistle'
+    // (long, smooth glide), 'trill' (fast fluttering vibrato, little pitch movement).
+    const stressPattern = [];
+    const archetypes = [];
+    for(let i=0;i<numSyl;i++){
+      const isStressed = (i % 2 === 0);
+      const variance = 0.92 + Math.random() * 0.16;
+      stressPattern.push((isStressed ? 1.15 : 0.82) * variance);
+
+      const r = Math.random();
+      let type;
+      if(isStressed){ type = r < 0.45 ? 'whistle' : (r < 0.8 ? 'trill' : 'blip'); }
+      else { type = r < 0.55 ? 'blip' : (r < 0.8 ? 'trill' : 'whistle'); }
+      archetypes.push(type);
+    }
+
+    // Independent "gesture" dimension for the amplitude envelope shape — combined with
+    // the pitch archetype above this gives many more distinct-sounding syllable types
+    // than pitch alone (a stutter can happen on a whistle OR a blip, etc.)
+    const energy = clamp((p.jumpSemis/24)*0.5 + (1-glideAmt)*0.5, 0, 1);
+    const gestureShapes = [];
+    for(let i=0;i<numSyl;i++){
+      const r = Math.random();
+      let shape;
+      if(energy > 0.6){ shape = r < 0.35 ? 'stutter' : (r < 0.65 ? 'rising' : (r < 0.85 ? 'pulse' : 'arc')); }
+      else if(energy > 0.3){ shape = r < 0.3 ? 'arc' : (r < 0.6 ? 'swell' : (r < 0.85 ? 'rising' : 'pulse')); }
+      else { shape = r < 0.35 ? 'falling' : (r < 0.7 ? 'swell' : 'arc'); }
+      gestureShapes.push(shape);
+    }
+
+    const typeDurMult = { blip: 0.55, trill: 0.95, whistle: 1.6 };
+    const durWeights = archetypes.map(t => typeDurMult[t] * (0.85 + Math.random()*0.3));
+    const gapWeights = [];
+    for(let i=0;i<numSyl-1;i++){
+      let mult = 0.85 + Math.random()*0.5;
+      if(Math.random() < 0.12) mult *= 2.3; // occasional "breath" pause between syllables
+      gapWeights.push(mult);
+    }
+
+    const gapShare = numSyl > 1 ? clamp(0.32 - 0.27*glideAmt, 0.03, 0.32) : 0;
+    const totalGapTime = p.totalDur * gapShare;
+    const totalDurTime = p.totalDur - totalGapTime;
+    const durWeightSum = durWeights.reduce((s,x)=>s+x, 0) || 1;
+    const gapWeightSum = gapWeights.reduce((s,x)=>s+x, 0) || 1;
+    const durations = durWeights.map(w => (w/durWeightSum) * totalDurTime);
+    const gaps = gapWeights.map(w => (w/gapWeightSum) * totalGapTime);
+
+    const sylStart = [], sylEnd = [];
+    let cursor = voiceStart;
+    for(let i=0;i<numSyl;i++){
+      sylStart.push(cursor);
+      cursor += durations[i];
+      sylEnd.push(cursor);
+      if(i < numSyl-1) cursor += gaps[i];
+    }
+    const voiceEnd = cursor;
+    const totalSpan = Math.max(0.001, voiceEnd - voiceStart);
+
+    // Base pitch contour sampled at each syllable's own position, plus per-archetype
+    // register variety and a touch of jitter so repeats never sound identical
+    const freqStart = [], freqEnd = [];
+    for(let i=0;i<numSyl;i++){
+      const ttStart = (sylStart[i]-voiceStart) / totalSpan;
+      const ttEnd = (sylEnd[i]-voiceStart) / totalSpan;
+      let fs = p.baseFreq * Math.pow(2, contourOffset(ttStart, p.jumpSemis, p.contour)/12);
+      let fe = p.baseFreq * Math.pow(2, contourOffset(ttEnd, p.jumpSemis, p.contour)/12);
+
+      if(archetypes[i] === 'blip'){
+        const extra = (4 + Math.random()*7) * (fe >= fs ? 1 : -1);
+        fe = fe * Math.pow(2, extra/12);
+      } else if(archetypes[i] === 'trill'){
+        fe = fs * Math.pow(2, ((Math.random()-0.5)*3)/12); // stays near fs; character comes from vibrato
+      }
+      const jitter = 1 + (Math.random()-0.5)*0.04;
+      freqStart.push(Math.max(40, fs*jitter));
+      freqEnd.push(Math.max(40, fe*jitter));
+    }
+
+    // Phrase-level "aliveness": a subtle audio-rate tremolo plus a few sparse
+    // micro-glitches across the whole voice, so nothing sounds too perfectly clean
+    const masterBaseLevel = master.gain.value;
+    const tremOsc = ctx.createOscillator();
+    tremOsc.type = 'sine';
+    tremOsc.frequency.value = 15 + Math.random()*30;
+    const tremDepthGain = ctx.createGain();
+    tremDepthGain.gain.value = masterBaseLevel * (0.05 + Math.random()*0.07);
+    tremOsc.connect(tremDepthGain);
+    tremDepthGain.connect(master.gain);
+    tremOsc.start(voiceStart); tremOsc.stop(voiceEnd + 0.05);
+    scheduleMicroGlitches(master, voiceStart, voiceEnd, masterBaseLevel);
+
+    const unisonCount = p.unison;
+    const detuneSpread = p.detune;
+    const crossfadeBase = Math.min(0.06, (p.totalDur / Math.max(1,numSyl)) * 0.3);
+
+    for(let u=0; u<unisonCount; u++){
+      const centsOffset = unisonCount > 1 ? (u - (unisonCount-1)/2) * detuneSpread : 0;
+
+      const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      const stereoAmt = p.stereo / 100;
+      if(pan){
+        pan.pan.setValueAtTime(0, voiceStart);
+        if(stereoAmt > 0.02){
+          const swings = Math.max(1, numSyl);
+          for(let i=0;i<=swings;i++){
+            const tt = voiceStart + (i/swings) * totalSpan;
+            const val = Math.sin(i * Math.PI) * stereoAmt * (u % 2 === 0 ? 1 : -1);
+            pan.pan.linearRampToValueAtTime(Math.max(-1,Math.min(1,val)), tt);
+          }
+        }
+        pan.connect(master);
+      }
+
+      for(let i=0;i<numSyl;i++){
+        const type = archetypes[i];
+        const durSyl = sylEnd[i] - sylStart[i];
+        const crossfade = Math.min(crossfadeBase * glideAmt, durSyl*0.4);
+        const playStart = Math.max(now, sylStart[i] - crossfade);
+        const playEnd = sylEnd[i] + crossfade;
+
+        const osc = ctx.createOscillator();
+        osc.type = p.wave;
+        if(osc.detune) osc.detune.setValueAtTime(centsOffset, sylStart[i]);
+        osc.frequency.setValueAtTime(freqStart[i], sylStart[i]);
+        if(type === 'blip'){
+          osc.frequency.exponentialRampToValueAtTime(freqEnd[i], sylStart[i] + durSyl*0.35);
+          osc.frequency.setValueAtTime(freqEnd[i], sylEnd[i]);
+        } else {
+          osc.frequency.exponentialRampToValueAtTime(freqEnd[i], sylEnd[i]);
+        }
+
+        if(p.fmDepth > 0 && type !== 'blip'){
+          const depthMult = type === 'trill' ? (1.3 + Math.random()*0.5) : (0.4 + Math.random()*0.3);
+          const rateMult = type === 'trill' ? (1.4 + Math.random()*0.6) : (0.5 + Math.random()*0.3);
+          const fm = ctx.createOscillator();
+          fm.type = 'sine';
+          fm.frequency.value = p.fmRate * rateMult;
+          const fmGain = ctx.createGain();
+          fmGain.gain.value = p.fmDepth * depthMult;
+          fm.connect(fmGain);
+          fmGain.connect(osc.frequency);
+          fm.start(playStart); fm.stop(playEnd + 0.02);
+        }
+
+        const g = ctx.createGain();
+        const basePeak = 0.6 / unisonCount + 0.15;
+        const archMult = type === 'blip' ? 1.05 : type === 'whistle' ? 0.9 : 1.0;
+        const peak = basePeak * stressPattern[i] * archMult;
+
+        scheduleGestureEnvelope(g, gestureShapes[i], sylStart[i], sylEnd[i], playStart, playEnd, peak, crossfade, durSyl);
+
+        osc.connect(g);
+        if(pan){ g.connect(pan); } else { g.connect(master); }
+        osc.start(playStart); osc.stop(playEnd + 0.02);
+
+        // A tiny noise "spark" right at the onset of a stressed syllable — a semantic
+        // accent independent of the grit slider, only from the first unison voice
+        // so it doesn't stack unisonCount times.
+        if(u === 0 && stressPattern[i] > 1.05){
+          scheduleSpark(ctx, master, sylStart[i]);
+        }
+      }
+    }
+
+    if(p.noiseAmt > 0.02){
+      for(let i=0;i<numSyl;i++){
+        const segStart = sylStart[i];
+        const segEnd = sylEnd[i];
+        const segDur = segEnd - segStart;
+        const noiseSrc = ctx.createBufferSource();
+        noiseSrc.buffer = makeNoiseBuffer(ctx, 0.5);
+        const noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.value = (freqStart[i] + freqEnd[i]) / 2;
+        noiseFilter.Q.value = 1.5;
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.0001, segStart);
+        noiseGain.gain.exponentialRampToValueAtTime(p.noiseAmt*0.5*stressPattern[i], segStart + segDur*0.15);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, segEnd);
+        noiseSrc.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(master);
+        noiseSrc.start(segStart); noiseSrc.stop(segEnd + 0.02);
+      }
+    }
+
+    let t = voiceEnd;
+
+    if(p.mechTiming === 'after'){
+      scheduleServo(ctx, master, t + 0.03, p.servoAmt, p.servoPitch, mechDur);
+      scheduleClicks(ctx, master, t + 0.03, p.clickAmt, p.clickCount, mechDur);
+      scheduleStatic(ctx, master, t + 0.03, p.staticAmt, mechDur);
+      t = t + 0.03 + mechDur;
+    }
+
+    return { master, endTime: t };
+  }
+
+  async function playRobotSound(){
+    ensureAudio();
+
+    await renderPreview();
+    if(!previewBuffer) return;
+
+    const duration = previewBuffer.duration;
+    const startSec = trimStart * duration;
+    const endSec = trimEnd * duration;
+    const playDur = Math.max(0.02, endSec - startSec);
+
+    const src = audioCtx.createBufferSource();
+    src.buffer = previewBuffer;
+    src.connect(masterGain);
+    src.start(audioCtx.currentTime, startSec, playDur);
+
+    const infoLength = document.getElementById('infoLength');
+    if(infoLength) infoLength.textContent = playDur.toFixed(2) + ' sec';
+
+    playhead.style.display = 'block';
+    const startTs = performance.now();
+    function animate(){
+      const elapsed = (performance.now() - startTs) / 1000;
+      const frac = trimStart + Math.min(1, elapsed / playDur) * (trimEnd - trimStart);
+      playhead.style.left = (frac * 100) + '%';
+      if(elapsed < playDur){
+        requestAnimationFrame(animate);
+      } else {
+        playhead.style.display = 'none';
+      }
+    }
+    animate();
+  }
+
+  function audioBufferToWav(buffer, meta){
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const numFrames = buffer.length;
+    const dataSize = numFrames * blockAlign;
+
+    // Optional LIST/INFO metadata chunk (ISFT/IART/ICMT/ICRD/INAM etc.) —
+    // standard, widely-supported WAV metadata, readable in Audacity, most
+    // DAWs, ffprobe, exiftool. Built first since its size affects the
+    // overall header size.
+    let infoBytes = new Uint8Array(0);
+    if(meta){
+      const enc = new TextEncoder();
+      const subChunks = [];
+      Object.keys(meta).forEach(id=>{
+        if(!meta[id]) return;
+        const textBytes = enc.encode(String(meta[id]) + '\0');
+        const padded = textBytes.length % 2 === 1;
+        const chunk = new Uint8Array(8 + textBytes.length + (padded ? 1 : 0));
+        for(let i=0;i<4;i++) chunk[i] = id.charCodeAt(i);
+        new DataView(chunk.buffer).setUint32(4, textBytes.length, true);
+        chunk.set(textBytes, 8);
+        subChunks.push(chunk);
+      });
+      if(subChunks.length){
+        const infoPayloadLen = 4 + subChunks.reduce((s,c)=> s + c.length, 0);
+        const infoPayload = new Uint8Array(infoPayloadLen);
+        infoPayload.set(enc.encode('INFO'), 0);
+        let off = 4;
+        subChunks.forEach(c=>{ infoPayload.set(c, off); off += c.length; });
+        infoBytes = new Uint8Array(8 + infoPayload.length);
+        infoBytes.set(enc.encode('LIST'), 0);
+        new DataView(infoBytes.buffer).setUint32(4, infoPayload.length, true);
+        infoBytes.set(infoPayload, 8);
+      }
+    }
+
+    const totalSize = 44 + infoBytes.length + dataSize;
+    const bufferOut = new ArrayBuffer(totalSize);
+    const view = new DataView(bufferOut);
+
+    function writeString(offset, str){
+      for(let i=0;i<str.length;i++) view.setUint8(offset+i, str.charCodeAt(i));
+    }
+
+    let p = 0;
+    writeString(p, 'RIFF'); p += 4;
+    view.setUint32(p, 4 + 24 + infoBytes.length + 8 + dataSize, true); p += 4;
+    writeString(p, 'WAVE'); p += 4;
+    writeString(p, 'fmt '); p += 4;
+    view.setUint32(p, 16, true); p += 4;
+    view.setUint16(p, format, true); p += 2;
+    view.setUint16(p, numChannels, true); p += 2;
+    view.setUint32(p, sampleRate, true); p += 4;
+    view.setUint32(p, sampleRate * blockAlign, true); p += 4;
+    view.setUint16(p, blockAlign, true); p += 2;
+    view.setUint16(p, bitDepth, true); p += 2;
+    if(infoBytes.length){ new Uint8Array(bufferOut, p, infoBytes.length).set(infoBytes); p += infoBytes.length; }
+    writeString(p, 'data'); p += 4;
+    view.setUint32(p, dataSize, true); p += 4;
+
+    const channelData = [];
+    for(let ch=0; ch<numChannels; ch++) channelData.push(buffer.getChannelData(ch));
+
+    let offset = p;
+    for(let i=0;i<numFrames;i++){
+      for(let ch=0; ch<numChannels; ch++){
+        let sample = Math.max(-1, Math.min(1, channelData[ch][i]));
+        sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        view.setInt16(offset, sample, true);
+        offset += 2;
+      }
+    }
+    return bufferOut;
+  }
+
+  async function exportWav(){
+    const exportBtn = document.getElementById('exportBtn');
+    exportBtn.disabled = true;
+    statusText.textContent = 'Rendering audio…';
+    try {
+      await renderPreview();
+      const duration = previewBuffer.duration;
+      const startSec = trimStart * duration;
+      const endSec = trimEnd * duration;
+      const sliced = sliceBuffer(previewBuffer, startSec, endSec);
+      const p = getParams();
+      const archetypeNote = currentArchetype !== 'none' ? archetypeLabels[currentArchetype] : 'None';
+      const meta = {
+        ISFT: 'K.K.Sound Robot Voice FM-Synth v1.0.0',
+        IART: 'K.K.Sound',
+        INAM: 'Robot Voice FM-Synth export',
+        ICRD: new Date().toISOString().slice(0,10),
+        ICMT: 'Archetype: ' + archetypeNote + '; Waveform: ' + p.waveType + '; Pitch: ' + Math.round(p.baseFreq) + 'Hz; Contour: ' + p.contour + '; Duration: ' + Math.round(sliced.duration*1000) + 'ms',
+      };
+      const wavBuffer = audioBufferToWav(sliced, meta);
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+      a.href = url;
+      a.download = 'robot_sound_' + stamp + '.wav';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      statusText.textContent = 'Saved.';
+      setTimeout(()=>{ statusText.textContent = ''; }, 2000);
+    } catch(err){
+      statusText.textContent = 'Export failed: ' + err.message;
+    } finally {
+      exportBtn.disabled = false;
+    }
+  }
+
+  const presets = {
+    surprise: {baseFreq:420, jump:12, duration:320, chirps:2, fmDepth:60, fmRate:40, noise:10, echo:15, waveType:'square',
+      servoAmt:25, servoPitch:220, clickAmt:15, clickCount:2, staticAmt:5, mechTiming:'during',
+      contour:'rise-fall', glide:35, unison:2, detune:20, stereo:20},
+    agree:    {baseFreq:300, jump:4,  duration:220, chirps:1, fmDepth:15, fmRate:20, noise:5,  echo:5,  waveType:'sine',
+      servoAmt:15, servoPitch:150, clickAmt:30, clickCount:1, staticAmt:0, mechTiming:'after',
+      contour:'rise', glide:80, unison:1, detune:0, stereo:0},
+    error:    {baseFreq:220, jump:-10,duration:400, chirps:2, fmDepth:90, fmRate:15, noise:45, echo:10, waveType:'sawtooth',
+      servoAmt:10, servoPitch:100, clickAmt:60, clickCount:4, staticAmt:35, mechTiming:'during',
+      contour:'fall', glide:20, unison:2, detune:35, stereo:10},
+    joy:      {baseFreq:500, jump:16, duration:450, chirps:4, fmDepth:70, fmRate:55, noise:8,  echo:25, waveType:'triangle',
+      servoAmt:35, servoPitch:280, clickAmt:20, clickCount:5, staticAmt:5, mechTiming:'during',
+      contour:'wobble', glide:55, unison:3, detune:15, stereo:45},
+    sad:      {baseFreq:260, jump:-14,duration:600, chirps:2, fmDepth:20, fmRate:10, noise:15, echo:35, waveType:'sine',
+      servoAmt:40, servoPitch:90, clickAmt:5, clickCount:1, staticAmt:10, mechTiming:'before',
+      contour:'fall-rise', glide:70, unison:1, detune:0, stereo:5},
+    curious:  {baseFreq:380, jump:9, duration:520, chirps:3, fmDepth:35, fmRate:30, noise:12, echo:20, waveType:'triangle',
+      servoAmt:20, servoPitch:200, clickAmt:10, clickCount:2, staticAmt:5, mechTiming:'during',
+      contour:'wobble', glide:75, unison:2, detune:14, stereo:35},
+    companion:{baseFreq:340, jump:7, duration:480, chirps:2, fmDepth:25, fmRate:22, noise:6, echo:18, waveType:'triangle',
+      servoAmt:18, servoPitch:170, clickAmt:8, clickCount:1, staticAmt:2, mechTiming:'after',
+      contour:'rise-fall', glide:85, unison:3, detune:10, stereo:15},
+  };
+
+  // --- Character archetypes -------------------------------------------------
+  // An archetype is NOT another preset that overwrites everything. It's a
+  // persistent "who is this robot" layer: it stays selected while you click
+  // through emotion presets or generate phrases from text, and each function
+  // below reshapes whatever params it's handed (from a preset OR from the
+  // text analyzer) so the identity (register, timbre, body mechanics) stays
+  // consistent while the *expression* (contour, energy, chirp count) keeps
+  // coming from the emotion/phrase.
+  let currentArchetype = 'none';
+
+  const archetypeModifiers = {
+    // low register, harsh square wave, loud/constant servo+clicks, almost no
+    // glide or detune = stable and threatening, regardless of the emotion
+    warMachine(p){
+      p.baseFreq = clamp(Math.round(p.baseFreq * 0.55), 150, 900);
+      p.waveType = 'square';
+      p.glide = clamp(Math.round(p.glide * 0.2), 0, 100);
+      p.servoAmt = clamp(Math.max(p.servoAmt, 55), 0, 100);
+      p.clickAmt = clamp(Math.max(p.clickAmt, 45), 0, 100);
+      p.staticAmt = clamp(Math.max(p.staticAmt, 10), 0, 100);
+      p.unison = 1;
+      p.detune = clamp(Math.round(p.detune * 0.3), 0, 60);
+      p.stereo = clamp(Math.round(p.stereo * 0.3), 0, 100);
+      return p;
+    },
+    // ragged vibrato, heavy noise/static, chaotic clicks, wide detune, jerky
+    // (near-zero) glide, forced wobble contour = malfunctioning unit
+    broken(p){
+      p.waveType = 'sawtooth';
+      p.fmDepth = clamp(Math.max(p.fmDepth, 120), 0, 200);
+      p.fmRate = clamp(Math.max(p.fmRate, 70), 5, 120);
+      p.noise = clamp(Math.max(p.noise, 55), 0, 100);
+      p.staticAmt = clamp(Math.max(p.staticAmt, 45), 0, 100);
+      p.clickAmt = clamp(Math.max(p.clickAmt, 60), 0, 100);
+      p.clickCount = clamp(Math.max(p.clickCount, 6), 0, 10);
+      p.detune = clamp(Math.max(p.detune, 45), 0, 60);
+      p.glide = clamp(Math.round(p.glide * 0.3), 0, 100);
+      p.contour = 'wobble';
+      return p;
+    },
+    // high register, max unison/detune, fast stereo motion, thin triangle
+    // wave, light body mechanics = many small voices / hive mind
+    swarm(p){
+      p.baseFreq = clamp(Math.round(p.baseFreq * 1.35), 150, 900);
+      p.waveType = 'triangle';
+      p.unison = 3;
+      p.detune = clamp(Math.max(p.detune, 45), 0, 60);
+      p.stereo = clamp(Math.max(p.stereo, 70), 0, 100);
+      p.servoAmt = clamp(Math.round(p.servoAmt * 0.4), 0, 100);
+      p.clickAmt = clamp(Math.round(p.clickAmt * 0.3), 0, 100);
+      return p;
+    },
+    // high register, soft sine wave, near-max glide, almost no body
+    // mechanics or noise = small, soft, harmless companion
+    friendlyBot(p){
+      p.baseFreq = clamp(Math.round(p.baseFreq * 1.25), 150, 900);
+      p.waveType = 'sine';
+      p.glide = clamp(Math.max(p.glide, 75), 0, 100);
+      p.servoAmt = clamp(Math.round(p.servoAmt * 0.25), 0, 100);
+      p.clickAmt = clamp(Math.round(p.clickAmt * 0.2), 0, 100);
+      p.staticAmt = clamp(Math.round(p.staticAmt * 0.2), 0, 100);
+      p.noise = clamp(Math.round(p.noise * 0.4), 0, 100);
+      return p;
+    },
+    // clicks/scan sounds happen BEFORE the voice, single stable unit, tight
+    // stereo image = an alert, stationary watcher
+    sentry(p){
+      p.servoAmt = clamp(Math.max(p.servoAmt, 40), 0, 100);
+      p.clickAmt = clamp(Math.max(p.clickAmt, 30), 0, 100);
+      p.mechTiming = 'before';
+      p.unison = 1;
+      p.detune = clamp(Math.round(p.detune * 0.5), 0, 60);
+      p.stereo = clamp(Math.round(p.stereo * 0.4), 0, 100);
+      return p;
+    },
+  };
+
+  const archetypeLabels = {
+    none: 'No archetype',
+    warMachine: 'War machine',
+    broken: 'Broken / glitchy',
+    swarm: 'Swarm / hive',
+    friendlyBot: 'Friendly companion',
+    sentry: 'Sentry / guardian',
+  };
+
+  function applyArchetype(params){
+    if(currentArchetype === 'none' || !archetypeModifiers[currentArchetype]) return params;
+    return archetypeModifiers[currentArchetype](Object.assign({}, params));
+  }
+
+  function updateArchetypeHint(){
+    const hint = document.getElementById('archetypeHint');
+    if(currentArchetype === 'none'){
+      hint.textContent = 'No archetype selected — emotion presets and generated phrases use their own default character. Pick an archetype to keep this robot\'s identity (register, timbre, body mechanics) consistent across every emotion and phrase you generate below.';
+    } else {
+      hint.textContent = 'Archetype: ' + archetypeLabels[currentArchetype] + ' — every emotion preset and generated phrase below will now be shaped to match this character. Choose "No archetype" to turn it off.';
+    }
+  }
+
+  const archetypeSelect = document.getElementById('archetypeSelect');
+  const emotionSelect = document.getElementById('emotionSelect');
+  archetypeSelect.addEventListener('change', ()=>{
+    currentArchetype = archetypeSelect.value;
+    updateArchetypeHint();
+    // Emotion presets depend on the archetype: if an emotion is already
+    // selected, re-apply it now so the sound updates to match the new
+    // character immediately, instead of waiting for the next click.
+    if(emotionSelect.value){
+      applyPreset(emotionSelect.value);
+    }
+  });
+
+  function applyPreset(name){
+    const base = presets[name];
+    if(!base) return;
+    const p = applyArchetype(base);
+    Object.keys(p).forEach(k=>{
+      if(els[k]){
+        els[k].value = p[k];
+        els[k].dispatchEvent(new Event('input'));
+      }
+    });
+    trimStart = 0; trimEnd = 1;
+    updateMarkerPositions();
+    if(emotionSelect) emotionSelect.value = name;
+    playRobotSound();
+  }
+
+  emotionSelect.addEventListener('change', ()=>{
+    if(emotionSelect.value) applyPreset(emotionSelect.value);
+  });
+
+  document.getElementById('playBtn').addEventListener('click', playRobotSound);
+  document.getElementById('exportBtn').addEventListener('click', exportWav);
+  document.getElementById('randomBtn').addEventListener('click', function(){
+    els.baseFreq.value = 150 + Math.floor(Math.random()*750);
+    els.jump.value = -24 + Math.floor(Math.random()*49);
+    els.duration.value = 100 + Math.floor(Math.random()*1700);
+    els.chirps.value = 1 + Math.floor(Math.random()*8);
+    els.fmDepth.value = Math.floor(Math.random()*200);
+    els.fmRate.value = 5 + Math.floor(Math.random()*115);
+    els.noise.value = Math.floor(Math.random()*100);
+    els.echo.value = Math.floor(Math.random()*80);
+    els.servoAmt.value = Math.floor(Math.random()*100);
+    els.servoPitch.value = 60 + Math.floor(Math.random()*440);
+    els.clickAmt.value = Math.floor(Math.random()*100);
+    els.clickCount.value = Math.floor(Math.random()*11);
+    els.staticAmt.value = Math.floor(Math.random()*100);
+    const waves = ['square','sawtooth','sine','triangle'];
+    els.waveType.value = waves[Math.floor(Math.random()*waves.length)];
+    const timings = ['before','during','after'];
+    els.mechTiming.value = timings[Math.floor(Math.random()*timings.length)];
+    const contours = ['rise','fall','rise-fall','fall-rise','wobble'];
+    els.contour.value = contours[Math.floor(Math.random()*contours.length)];
+    els.glide.value = Math.floor(Math.random()*101);
+    els.unison.value = 1 + Math.floor(Math.random()*3);
+    els.detune.value = Math.floor(Math.random()*61);
+    els.stereo.value = Math.floor(Math.random()*101);
+    Object.keys(outs).forEach(k=>{ els[k].dispatchEvent(new Event('input')); });
+    trimStart = 0; trimEnd = 1;
+    updateMarkerPositions();
+    if(emotionSelect) emotionSelect.value = '';
+    playRobotSound();
+  });
+
+  // ---- Sequence builder ----
+  let sequence = [];
+  let seqCounter = 0;
+  const seqList = document.getElementById('seqList');
+
+  // Full-sequence waveform preview + its own independent trim selection,
+  // separate from the single-sound trim above.
+  let seqPreviewBuffer = null;
+  let seqTrimStart = 0;
+  let seqTrimEnd = 1;
+  const seqCanvas = document.getElementById('seqCanvas');
+  const seqCtx2d = seqCanvas.getContext('2d');
+  const seqMarkerStart = document.getElementById('seqMarkerStart');
+  const seqMarkerEnd = document.getElementById('seqMarkerEnd');
+  const seqPlayhead = document.getElementById('seqPlayhead');
+
+  function resizeSeqCanvas(){
+    seqCanvas.width = seqCanvas.clientWidth * devicePixelRatio;
+    seqCanvas.height = seqCanvas.clientHeight * devicePixelRatio;
+  }
+  resizeSeqCanvas();
+  window.addEventListener('resize', resizeSeqCanvas);
+
+  function drawSeqIdle(){
+    seqCtx2d.clearRect(0,0,seqCanvas.width, seqCanvas.height);
+    seqCtx2d.strokeStyle = '#3a4642';
+    seqCtx2d.lineWidth = 2 * devicePixelRatio;
+    seqCtx2d.beginPath();
+    seqCtx2d.moveTo(0, seqCanvas.height/2);
+    seqCtx2d.lineTo(seqCanvas.width, seqCanvas.height/2);
+    seqCtx2d.stroke();
+  }
+  drawSeqIdle();
+
+  function updateSeqMarkerPositions(){
+    seqMarkerStart.style.left = (seqTrimStart * 100) + '%';
+    seqMarkerEnd.style.left = (seqTrimEnd * 100) + '%';
+  }
+  updateSeqMarkerPositions();
+
+  function drawSeqWaveform(){
+    if(!seqPreviewBuffer){ drawSeqIdle(); return; }
+    const data = seqPreviewBuffer.getChannelData(0);
+    const width = seqCanvas.width, height = seqCanvas.height;
+    const mid = height / 2;
+    const samplesPerPixel = Math.max(1, Math.floor(data.length / width));
+
+    seqCtx2d.clearRect(0, 0, width, height);
+    seqCtx2d.strokeStyle = '#1D9E75';
+    seqCtx2d.lineWidth = 1 * devicePixelRatio;
+    seqCtx2d.beginPath();
+    for(let x=0; x<width; x++){
+      const startIdx = x * samplesPerPixel;
+      let min = 1, max = -1;
+      for(let i=0;i<samplesPerPixel;i++){
+        const idx = startIdx + i;
+        if(idx >= data.length) break;
+        const v = data[idx];
+        if(v < min) min = v;
+        if(v > max) max = v;
+      }
+      if(max < min){ min = 0; max = 0; }
+      const yTop = mid - max * mid * 0.9;
+      const yBottom = mid - min * mid * 0.9;
+      seqCtx2d.moveTo(x, yTop);
+      seqCtx2d.lineTo(x, yBottom);
+    }
+    seqCtx2d.stroke();
+
+    const leftPx = seqTrimStart * width;
+    const rightPx = seqTrimEnd * width;
+    seqCtx2d.fillStyle = 'rgba(59,232,172,0.10)';
+    seqCtx2d.fillRect(leftPx, 0, Math.max(0, rightPx - leftPx), height);
+    seqCtx2d.fillStyle = 'rgba(0,0,0,0.65)';
+    if(leftPx > 0) seqCtx2d.fillRect(0, 0, leftPx, height);
+    if(rightPx < width) seqCtx2d.fillRect(rightPx, 0, width - rightPx, height);
+  }
+
+  // Offline-renders the whole sequence (all steps + gaps) into one buffer,
+  // used for both the waveform preview and as the source for trimmed
+  // playback/export — so what you see is exactly what you get.
+  async function renderSequencePreview(){
+    if(sequence.length === 0){ seqPreviewBuffer = null; drawSeqIdle(); return null; }
+    const sampleRate = 44100;
+    let totalSeconds = 0.1;
+    sequence.forEach(step=>{ totalSeconds += step.buffer.duration + step.gapMs/1000; });
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(sampleRate * totalSeconds), sampleRate);
+    let t = 0.05;
+    sequence.forEach(step=>{
+      const src = offlineCtx.createBufferSource();
+      src.buffer = step.buffer;
+      src.connect(offlineCtx.destination);
+      src.start(t);
+      t += step.buffer.duration + step.gapMs/1000;
+    });
+    const rendered = await offlineCtx.startRendering();
+    seqPreviewBuffer = rendered;
+    drawSeqWaveform();
+    return rendered;
+  }
+
+  function setupSeqMarkerDrag(el, which){
+    el.addEventListener('pointerdown', (e)=>{
+      el.setPointerCapture(e.pointerId);
+      const onMove = (ev)=>{
+        const rect = seqCanvas.getBoundingClientRect();
+        let frac = (ev.clientX - rect.left) / rect.width;
+        frac = Math.max(0, Math.min(1, frac));
+        if(which === 'start'){
+          seqTrimStart = Math.max(0, Math.min(frac, seqTrimEnd - 0.02));
+        } else {
+          seqTrimEnd = Math.min(1, Math.max(frac, seqTrimStart + 0.02));
+        }
+        updateSeqMarkerPositions();
+        drawSeqWaveform();
+      };
+      const onUp = ()=>{
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  }
+  setupSeqMarkerDrag(seqMarkerStart, 'start');
+  setupSeqMarkerDrag(seqMarkerEnd, 'end');
+
+  // Called after any structural change to the sequence (add/remove/reorder/
+  // clear) — resets the selection to "everything" since the old fractional
+  // selection would otherwise point at a different, misaligned part of the
+  // new timeline, then re-renders the preview buffer + waveform.
+  function seqStructureChanged(){
+    seqTrimStart = 0; seqTrimEnd = 1;
+    updateSeqMarkerPositions();
+    renderSequencePreview();
+  }
+
+  function renderSeqList(){
+    seqList.innerHTML = '';
+    if(sequence.length === 0){
+      const p = document.createElement('p');
+      p.style.cssText = 'font-size:13px;color:var(--text-muted);margin:0;';
+      p.textContent = 'No steps yet — dial in a sound above and click "Add current sound".';
+      seqList.appendChild(p);
+      return;
+    }
+    sequence.forEach((step, idx) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:8px; flex-wrap:wrap;';
+      row.innerHTML =
+        '<span style="font-size:13px; font-weight:600; min-width:18px;">' + (idx+1) + '.</span>' +
+        '<span style="font-size:13px; flex:1; min-width:140px;">' + step.label + '</span>' +
+        '<label style="font-size:12px; color:var(--text-secondary); display:flex; align-items:center; gap:4px;">Gap ' +
+          '<input type="number" min="0" max="3000" step="10" value="' + step.gapMs + '" data-gap-idx="' + idx + '" style="width:64px; height:26px; border-radius:6px; border:1px solid var(--border-strong); padding:0 6px; background:var(--panel); color:var(--text); font-family:inherit;">ms</label>' +
+        '<button data-up-idx="' + idx + '" style="padding:4px 8px;">↑</button>' +
+        '<button data-down-idx="' + idx + '" style="padding:4px 8px;">↓</button>' +
+        '<button data-remove-idx="' + idx + '" style="padding:4px 8px;">✕</button>';
+      seqList.appendChild(row);
+    });
+    seqList.querySelectorAll('[data-gap-idx]').forEach(inp=>{
+      inp.addEventListener('input', e=>{
+        sequence[parseInt(e.target.dataset.gapIdx,10)].gapMs = parseFloat(e.target.value) || 0;
+        renderSequencePreview();
+      });
+    });
+    seqList.querySelectorAll('[data-remove-idx]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        sequence.splice(parseInt(e.target.dataset.removeIdx,10), 1);
+        renderSeqList();
+        seqStructureChanged();
+      });
+    });
+    seqList.querySelectorAll('[data-up-idx]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        const i = parseInt(e.target.dataset.upIdx,10);
+        if(i>0){ const tmp=sequence[i-1]; sequence[i-1]=sequence[i]; sequence[i]=tmp; renderSeqList(); seqStructureChanged(); }
+      });
+    });
+    seqList.querySelectorAll('[data-down-idx]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        const i = parseInt(e.target.dataset.downIdx,10);
+        if(i<sequence.length-1){ const tmp=sequence[i+1]; sequence[i+1]=sequence[i]; sequence[i]=tmp; renderSeqList(); seqStructureChanged(); }
+      });
+    });
+  }
+  renderSeqList();
+  seqStructureChanged();
+
+  document.getElementById('addStepBtn').addEventListener('click', async ()=>{
+    await renderPreview();
+    if(!previewBuffer) return;
+    const duration = previewBuffer.duration;
+    const startSec = trimStart * duration;
+    const endSec = trimEnd * duration;
+    const stepBuffer = sliceBuffer(previewBuffer, startSec, endSec);
+
+    const p = getParams();
+    seqCounter++;
+    const label = 'Sound ' + seqCounter + ' — ' + Math.round(p.baseFreq) + 'Hz · ' + Math.round(stepBuffer.duration*1000) + 'ms · ' + p.contour;
+    sequence.push({ id: seqCounter, label: label, buffer: stepBuffer, gapMs: 150 });
+    renderSeqList();
+    seqStructureChanged();
+    statusText.textContent = 'Added to sequence.';
+    setTimeout(()=>{ statusText.textContent=''; }, 1200);
+  });
+
+  document.getElementById('clearSeqBtn').addEventListener('click', ()=>{
+    sequence = [];
+    renderSeqList();
+    seqStructureChanged();
+  });
+
+  async function playSequence(){
+    if(sequence.length === 0){ statusText.textContent = 'Sequence is empty.'; return; }
+    ensureAudio();
+    if(!seqPreviewBuffer) await renderSequencePreview();
+    if(!seqPreviewBuffer) return;
+
+    const duration = seqPreviewBuffer.duration;
+    const startSec = seqTrimStart * duration;
+    const endSec = seqTrimEnd * duration;
+    const playDur = Math.max(0.02, endSec - startSec);
+
+    const src = audioCtx.createBufferSource();
+    src.buffer = seqPreviewBuffer;
+    src.connect(masterGain);
+    src.start(audioCtx.currentTime, startSec, playDur);
+
+    seqPlayhead.style.display = 'block';
+    const startTs = performance.now();
+    function animate(){
+      const elapsed = (performance.now() - startTs) / 1000;
+      const frac = seqTrimStart + Math.min(1, elapsed / playDur) * (seqTrimEnd - seqTrimStart);
+      seqPlayhead.style.left = (frac * 100) + '%';
+      if(elapsed < playDur){
+        requestAnimationFrame(animate);
+      } else {
+        seqPlayhead.style.display = 'none';
+      }
+    }
+    animate();
+  }
+
+  async function exportSequenceWav(){
+    if(sequence.length === 0){ statusText.textContent = 'Sequence is empty.'; return; }
+    const exportSeqBtn = document.getElementById('exportSeqBtn');
+    exportSeqBtn.disabled = true;
+    statusText.textContent = 'Rendering sequence…';
+    try{
+      if(!seqPreviewBuffer) await renderSequencePreview();
+      const duration = seqPreviewBuffer.duration;
+      const startSec = seqTrimStart * duration;
+      const endSec = seqTrimEnd * duration;
+      const sliced = sliceBuffer(seqPreviewBuffer, startSec, endSec);
+      const meta = {
+        ISFT: 'K.K.Sound Robot Voice FM-Synth v1.0.0',
+        IART: 'K.K.Sound',
+        INAM: 'Robot Voice FM-Synth sequence export',
+        ICRD: new Date().toISOString().slice(0,10),
+        ICMT: 'Sequence of ' + sequence.length + ' sound(s), total ' + Math.round(sliced.duration*1000) + 'ms',
+      };
+      const wavBuffer = audioBufferToWav(sliced, meta);
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+      a.href = url;
+      a.download = 'robot_sequence_' + stamp + '.wav';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      statusText.textContent = 'Sequence saved.';
+      setTimeout(()=>{ statusText.textContent = ''; }, 2000);
+    } catch(err){
+      statusText.textContent = 'Export failed: ' + err.message;
+    } finally {
+      exportSeqBtn.disabled = false;
+    }
+  }
+
+  document.getElementById('playSeqBtn').addEventListener('click', playSequence);
+  document.getElementById('exportSeqBtn').addEventListener('click', exportSequenceWav);
+
+
+  document.getElementById('playSeqBtn').addEventListener('click', playSequence);
+  document.getElementById('exportSeqBtn').addEventListener('click', exportSequenceWav);
+
+  // ---- Text → Voice: lightweight heuristic emotion detection (no ML, no server) ----
+  function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+  const VOWELS = 'aeiouyаеёиоуыэюя';
+  function countSyllables(word){
+    const clean = word.toLowerCase().replace(/[^a-zа-яё]/g, '');
+    if(!clean) return 0;
+    let count = 0, prevVowel = false;
+    for(let i=0;i<clean.length;i++){
+      const isVowel = VOWELS.indexOf(clean[i]) !== -1;
+      if(isVowel && !prevVowel) count++;
+      prevVowel = isVowel;
+    }
+    return Math.max(1, count);
+  }
+
+  function totalSyllables(text){
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if(words.length === 0) return 1;
+    return words.reduce((sum, w) => sum + countSyllables(w), 0);
+  }
+
+  const POSITIVE_WORDS = ['good','great','love','loves','loved','happy','yes','awesome','nice','wonderful',
+    'thanks','thank','cool','excellent','glad','joy','yay','perfect','friend','hello','hi','amazing','best','fun',
+    'хорошо','отлично','рад','рада','счастлив','счастлива','да','круто','привет','спасибо','ура','класс','супер','друг','здорово','классно','люблю'];
+  const NEGATIVE_WORDS = ['bad','no','sad','hate','error','danger','wrong','fail','sorry','scared','afraid',
+    'warning','stop','broken','lost','help','emergency','critical','angry','mad',
+    'плохо','нет','ошибка','опасность','неправильно','провал','простите','страшно','предупреждение','стоп','сломан','потерян','грустно','помогите','опасно','тревога'];
+
+  function analyzeText(text){
+    const clean = text.trim();
+    const words = clean.split(/\s+/).filter(Boolean);
+    const wordCount = Math.max(1, words.length);
+    const syllableCount = Math.max(1, totalSyllables(clean));
+    const hasQuestion = /\?/.test(clean);
+    const exclaimCount = (clean.match(/!/g) || []).length;
+    const hasExclaim = exclaimCount > 0;
+
+    const letters = clean.replace(/[^a-zA-Zа-яА-ЯёЁ]/g, '');
+    const upperCount = (letters.match(/[A-ZА-ЯЁ]/g) || []).length;
+    const capsRatio = letters.length ? upperCount / letters.length : 0;
+
+    const lower = clean.toLowerCase();
+    let posHits = 0, negHits = 0;
+    POSITIVE_WORDS.forEach(w=>{ if(lower.includes(w)) posHits++; });
+    NEGATIVE_WORDS.forEach(w=>{ if(lower.includes(w)) negHits++; });
+
+    let valence = 0;
+    if(posHits + negHits > 0) valence = (posHits - negHits) / (posHits + negHits);
+
+    const arousal = clamp(0.25 + exclaimCount*0.25 + capsRatio*0.5 + (wordCount <= 2 ? 0.15 : 0), 0, 1);
+    const dominance = clamp(0.5 + (hasExclaim ? 0.2 : 0) - (hasQuestion ? 0.15 : 0), 0, 1);
+
+    return { valence, arousal, dominance, wordCount, syllableCount, hasQuestion, hasExclaim, exclaimCount };
+  }
+
+  // Maps the detected emotion onto the exact same parameters the sliders control
+  function textToParams(text){
+    const a = analyzeText(text);
+    const v = a.valence, ar = a.arousal, d = a.dominance;
+    const posNorm = (v + 1) / 2; // 0..1, higher = more positive
+
+    let contour;
+    if(a.hasQuestion) contour = 'rise';
+    else if(v < -0.3) contour = 'fall';
+    else if(v < -0.05) contour = 'fall-rise';
+    else if(ar > 0.6) contour = 'wobble';
+    else contour = 'rise-fall';
+
+    let waveType = 'square';
+    if(v > 0.2) waveType = 'triangle';
+    else if(v < -0.3) waveType = 'sawtooth';
+
+    // Duration and chirp count scale with the actual syllable count, not word count —
+    // "danger ahead" (4 syllables) should read as a longer phrase than "hi" (1 syllable).
+    const perSyllableMs = 190 - 90*ar; // excited speech = snappier syllables, but never near-zero
+    const durationFromSyllables = a.syllableCount * perSyllableMs + (a.hasExclaim ? 60 : 0);
+
+    const params = {
+      baseFreq: clamp(Math.round(300 + 200*(d*0.7 + v*0.3)), 150, 900),
+      jump: clamp(Math.round(6 + 16*ar + a.exclaimCount*4), 2, 24),
+      duration: clamp(Math.round(durationFromSyllables), 150, 1800),
+      chirps: clamp(a.syllableCount, 1, 8),
+      fmDepth: clamp(Math.round(15 + 100*ar), 0, 200),
+      fmRate: clamp(Math.round(15 + 70*ar), 5, 120),
+      noise: clamp(Math.round(60*(1-posNorm)), 0, 100),
+      echo: clamp(Math.round(12 + 45*(1-ar)), 0, 80),
+      waveType: waveType,
+      contour: contour,
+      glide: clamp(Math.round(80 - 55*ar), 0, 100),
+      unison: ar > 0.6 ? 3 : ar > 0.3 ? 2 : 1,
+      detune: clamp(Math.round(8 + 35*ar), 0, 60),
+      stereo: clamp(Math.round(8 + 45*ar), 0, 100),
+      servoAmt: clamp(Math.round(10 + 45*d), 0, 100),
+      servoPitch: clamp(Math.round(110 + 160*d), 60, 500),
+      clickAmt: clamp(Math.round(8 + 55*(1-posNorm)), 0, 100),
+      clickCount: clamp(Math.round(1 + 5*(1-posNorm)), 0, 10),
+      staticAmt: clamp(Math.round(5 + 45*(1-posNorm)), 0, 100),
+      mechTiming: a.hasExclaim ? 'during' : (a.hasQuestion ? 'after' : 'during'),
+    };
+    return { params: params, analysis: a };
+  }
+
+  function applyTextParams(text){
+    const result = textToParams(text);
+    const p = applyArchetype(result.params);
+    Object.keys(p).forEach(k=>{
+      if(els[k]){
+        els[k].value = p[k];
+        els[k].dispatchEvent(new Event('input'));
+      }
+    });
+    trimStart = 0; trimEnd = 1;
+    updateMarkerPositions();
+    if(emotionSelect) emotionSelect.value = '';
+
+    const a = result.analysis;
+    const moodLabel = a.valence > 0.2 ? 'positive' : a.valence < -0.2 ? 'negative' : 'neutral';
+    const energyLabel = a.arousal > 0.6 ? 'high energy' : a.arousal > 0.3 ? 'moderate energy' : 'calm';
+    let extra = [];
+    if(a.hasQuestion) extra.push('question');
+    if(a.hasExclaim) extra.push('emphatic');
+    const archetypeNote = currentArchetype !== 'none' ? (' [' + archetypeLabels[currentArchetype] + ']') : '';
+    document.getElementById('textAnalysisOut').textContent =
+      'Detected: ' + moodLabel + ', ' + energyLabel + (extra.length ? ', ' + extra.join(', ') : '') + '.' + archetypeNote;
+
+    playRobotSound();
+  }
+
+  document.getElementById('textGenBtn').addEventListener('click', ()=>{
+    const text = document.getElementById('textInput').value;
+    if(!text.trim()) return;
+    applyTextParams(text);
+  });
+  document.getElementById('textInput').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      document.getElementById('textGenBtn').click();
+    }
+  });
+
+  // ==================================================================
+  // Redesign wiring — knobs, plugin-style header, output meter.
+  // Everything above (params, presets, archetypes, text→voice, sequence
+  // builder, WAV export) is untouched; this section only adds a visual
+  // layer on top of the same underlying <input> elements.
+  // ==================================================================
+
+  // ---- Knob widgets: drag/keyboard control synced to the hidden native <input type=range> ----
+  function updateKnobVisual(input){
+    const knob = document.querySelector('.knob[data-for="' + input.id + '"]');
+    if(!knob) return;
+    const min = parseFloat(input.min), max = parseFloat(input.max);
+    const frac = max > min ? (parseFloat(input.value) - min) / (max - min) : 0;
+    knob.style.setProperty('--frac', frac);
+    const pointer = knob.querySelector('.knob-pointer');
+    if(pointer) pointer.style.setProperty('--angle', (-135 + frac*270) + 'deg');
+  }
+
+  document.querySelectorAll('.knob[data-for]').forEach(knob=>{
+    const input = document.getElementById(knob.dataset.for);
+    if(!input) return;
+    input.dataset.default = input.value;
+    updateKnobVisual(input);
+    input.addEventListener('input', ()=> updateKnobVisual(input));
+
+    knob.setAttribute('tabindex', '0');
+    knob.setAttribute('role', 'slider');
+    knob.setAttribute('aria-valuemin', input.min);
+    knob.setAttribute('aria-valuemax', input.max);
+
+    knob.addEventListener('pointerdown', (e)=>{
+      knob.setPointerCapture(e.pointerId);
+      const min = parseFloat(input.min), max = parseFloat(input.max);
+      const step = parseFloat(input.step) || 1;
+      const startY = e.clientY;
+      const startVal = parseFloat(input.value);
+      const range = max - min;
+      const onMove = (ev)=>{
+        const deltaY = startY - ev.clientY; // dragging up increases the value
+        const sensitivity = range / 150; // full range across ~150px of drag
+        let next = startVal + deltaY * sensitivity;
+        next = Math.round(next / step) * step;
+        next = Math.max(min, Math.min(max, next));
+        if(String(next) !== input.value){
+          input.value = String(next);
+          input.dispatchEvent(new Event('input', {bubbles:true}));
+        }
+      };
+      const onUp = ()=>{
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+
+    knob.addEventListener('dblclick', ()=>{
+      input.value = input.dataset.default;
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+    });
+
+    knob.addEventListener('keydown', (e)=>{
+      const step = parseFloat(input.step) || 1;
+      const min = parseFloat(input.min), max = parseFloat(input.max);
+      let val = parseFloat(input.value);
+      if(e.key === 'ArrowUp' || e.key === 'ArrowRight') val = Math.min(max, val + step);
+      else if(e.key === 'ArrowDown' || e.key === 'ArrowLeft') val = Math.max(min, val - step);
+      else return;
+      e.preventDefault();
+      input.value = String(val);
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+    });
+  });
+
+  // ---- Reset defaults (captured from the page's original markup values) ----
+  const DEFAULTS = {};
+  Object.keys(els).forEach(k=>{ if(els[k]) DEFAULTS[k] = els[k].value; });
+
+  function resetAllToDefaults(){
+    currentArchetype = 'none';
+    archetypeSelect.value = 'none';
+    updateArchetypeHint();
+    Object.keys(DEFAULTS).forEach(k=>{
+      els[k].value = DEFAULTS[k];
+      els[k].dispatchEvent(new Event('input'));
+    });
+    if(emotionSelect) emotionSelect.value = '';
+    trimStart = 0; trimEnd = 1;
+    updateMarkerPositions();
+    renderPreview();
+  }
+
+  // ---- Header: save / reset / mute ----
+  document.getElementById('topSaveBtn').addEventListener('click', exportWav);
+  document.getElementById('topResetBtn').addEventListener('click', resetAllToDefaults);
+  const topMuteBtn = document.getElementById('topMuteBtn');
+  topMuteBtn.addEventListener('click', ()=>{
+    isMuted = !isMuted;
+    if(masterGain) masterGain.gain.value = isMuted ? 0 : 1;
+    topMuteBtn.textContent = isMuted ? '🔇' : '🔊';
+    topMuteBtn.classList.toggle('active', isMuted);
+    topMuteBtn.title = isMuted ? 'Unmute output' : 'Mute output';
+  });
+
+  renderPreview();
+})();
+</script>
+</body>
+</html>
